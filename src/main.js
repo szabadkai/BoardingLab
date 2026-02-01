@@ -39,6 +39,7 @@ class BoardingLab {
     init() {
         this.cacheElements();
         this.setupEventListeners();
+        this.loadSavedAlgorithms(); // Load from localStorage
         this.renderAlgorithmList();
         this.initRenderer();
         this.initTimeline();
@@ -211,9 +212,78 @@ class BoardingLab {
         }
 
         // Re-render
+        this.saveAlgorithms(); // Sync to storage
         this.renderAlgorithmList();
         this.selectAlgorithm(original);
         this.runSimulation();
+    }
+
+    /**
+     * Persistence logic for localstorage
+     */
+    saveAlgorithms() {
+        try {
+            const modified = algorithmList
+                .filter(a => a.isModified)
+                .map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    code: a.code,
+                    parameters: a.parameters,
+                    isModified: true
+                }));
+            localStorage.setItem('boarding_lab_custom_algos', JSON.stringify(modified));
+        } catch (e) {
+            console.error('Failed to save algorithms:', e);
+        }
+    }
+
+    loadSavedAlgorithms() {
+        try {
+            const savedData = localStorage.getItem('boarding_lab_custom_algos');
+            if (!savedData) return;
+
+            const savedAlgorithms = JSON.parse(savedData);
+            savedAlgorithms.forEach(saved => {
+                const idx = algorithmList.findIndex(a => a.id === saved.id);
+                if (idx !== -1) {
+                    const original = algorithmList[idx];
+                    const updated = {
+                        ...original,
+                        ...saved,
+                        baseAlgorithm: original,
+                        createPriorityFn: (params, rng) => this._createDynamicPriorityFn(saved.code, params)
+                    };
+                    algorithmList[idx] = updated;
+
+                    // Sync selectedAlgorithm reference if it matches
+                    if (this.selectedAlgorithm && this.selectedAlgorithm.id === saved.id) {
+                        this.selectedAlgorithm = updated;
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('Failed to load algorithms:', e);
+        }
+    }
+
+    /**
+     * Reusable logic to create a priority function from code string with param injection
+     */
+    _createDynamicPriorityFn(code, params = {}) {
+        // Prepend param overrides
+        let injection = '';
+        for (const [key, val] of Object.entries(params)) {
+            injection += `const ${key} = ${val};\n`;
+        }
+
+        // Comment out original declarations in user code to avoid re-declaration errors
+        const modifiedCode = code.replace(/const\s+(\w+)\s*=\s*([-+]?[\d\.]+);/g, (m, name) => {
+            return params.hasOwnProperty(name) ? `// ${m} (UI Override)` : m;
+        });
+
+        const fullFnCode = `"use strict";\n${injection}\n${modifiedCode}`;
+        return new Function('passenger', 'context', fullFnCode);
     }
 
     updateAlgorithmDescription() {
@@ -576,22 +646,8 @@ class BoardingLab {
                 };
             }
 
-            // 2. Prepare injection logic
-            const createPriorityFn = (params = {}, rng) => {
-                // Prepend param overrides
-                let injection = '';
-                for (const [key, val] of Object.entries(params)) {
-                    injection += `const ${key} = ${val};\n`;
-                }
-
-                // Comment out original declarations in user code to avoid re-declaration errors
-                const modifiedCode = code.replace(/const\s+(\w+)\s*=\s*([-+]?[\d\.]+);/g, (m, name) => {
-                    return params.hasOwnProperty(name) ? `// ${m} (UI Override)` : m;
-                });
-
-                const fullFnCode = `"use strict";\n${injection}\n${modifiedCode}`;
-                return new Function('passenger', 'context', fullFnCode);
-            };
+            // 2. Prepare injection logic using refactored method
+            const createPriorityFn = (params = {}, rng) => this._createDynamicPriorityFn(code, params);
 
             // Test compilation
             const testFn = createPriorityFn({}, this.rng);
@@ -626,6 +682,8 @@ class BoardingLab {
                 algorithmList[idx] = newAlgo;
             }
             this.selectedAlgorithm = newAlgo;
+
+            this.saveAlgorithms(); // Persist to localStorage
 
             this.elements.validationMessages.innerHTML =
                 '<div class="validation-success">✓ Valid algorithm</div>';
