@@ -7,9 +7,12 @@ import { RandomGenerator } from './engine/RandomGenerator.js';
 import { Aircraft } from './engine/Aircraft.js';
 import { generatePassengers } from './engine/Passenger.js';
 import { Simulation } from './engine/Simulation.js';
-import { AircraftRenderer } from './visualization/AircraftRenderer.js';
+// Replace old renderer import with the new modular ones
+import { BlueprintRenderer } from './visualization/renderers/BlueprintRenderer.js';
+
 import { Timeline } from './visualization/Timeline.js';
 import { algorithmList } from './algorithms/presets/index.js';
+import { GeneticOptimizer } from './algorithms/GeneticOptimizer.js';
 import { createAlgorithmContext } from './algorithms/AlgorithmRunner.js';
 import { calculateMetrics, formatTime, formatMetricDiff } from './metrics/MetricsCalculator.js';
 import { analyzeDelayCauses, generateSummaryExplanation } from './metrics/ExplanationEngine.js';
@@ -67,7 +70,10 @@ class BoardingLab {
             metricAisleBlocked: document.getElementById('metric-aisle-blocked'),
             metricAvgWait: document.getElementById('metric-avg-wait'),
             metricWorstDelay: document.getElementById('metric-worst-delay'),
+            metricWorstDelay: document.getElementById('metric-worst-delay'),
             explanationText: document.getElementById('explanation-text'),
+
+
 
             advancedToggle: document.getElementById('advanced-toggle'),
             codeEditorModal: document.getElementById('code-editor-modal'),
@@ -102,6 +108,8 @@ class BoardingLab {
             this.timeline.setSpeed(parseFloat(e.target.value));
         });
 
+
+
         // Advanced mode
         this.elements.advancedToggle.addEventListener('click', () => this.openCodeEditor());
         this.elements.modalClose.addEventListener('click', () => this.closeCodeEditor());
@@ -128,33 +136,84 @@ class BoardingLab {
         algorithmList.forEach((algo, index) => {
             const btn = document.createElement('button');
             btn.className = `algorithm-btn${index === 0 ? ' active' : ''}`;
+            if (this.selectedAlgorithm && this.selectedAlgorithm.id === algo.id) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+
+            const nameDisplay = algo.isModified ? `${algo.name} *` : algo.name;
+
             btn.innerHTML = `
-        <span class="algo-name">${algo.name}</span>
-        <span class="edit-icon">✏️</span>
+        <span class="algo-name">${nameDisplay}</span>
+        <div class="algo-actions">
+           ${algo.isModified ? '<span class="revert-icon" title="Revert to default">↩️</span>' : ''}
+           <span class="edit-icon" title="Edit code">✏️</span>
+        </div>
       `;
             btn.title = algo.description;
 
             btn.addEventListener('click', (e) => {
+                // Revert action
+                if (e.target.classList.contains('revert-icon')) {
+                    e.stopPropagation();
+                    this.revertAlgorithm(algo);
+                    return;
+                }
+
                 // If clicking edit icon, open editor
                 if (e.target.classList.contains('edit-icon')) {
+                    e.stopPropagation();
                     this.selectedAlgorithm = algo;
                     this.openCodeEditor();
                     return;
                 }
 
                 // Select algorithm
-                container.querySelectorAll('.algorithm-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.selectedAlgorithm = algo;
-                this.updateAlgorithmDescription();
-                this.renderParameters();
+                this.selectAlgorithm(algo);
             });
 
             container.appendChild(btn);
         });
 
+        this.renderParameters();
+    }
+
+    selectAlgorithm(algo) {
+        this.selectedAlgorithm = algo;
+        // Update UI
+        const buttons = this.elements.algorithmSelector.querySelectorAll('.algorithm-btn');
+        buttons.forEach(btn => {
+            const nameSpan = btn.querySelector('.algo-name');
+            const cleanName = nameSpan.textContent.replace(' *', '');
+            if (cleanName === algo.name.replace(' (Modified)', '')) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
         this.updateAlgorithmDescription();
         this.renderParameters();
+    }
+
+    revertAlgorithm(modifiedAlgo) {
+        if (!confirm(`Revert "${modifiedAlgo.name}" to original defaults?`)) return;
+
+        // Restore original object instance
+        const original = modifiedAlgo.baseAlgorithm;
+        if (!original) return;
+
+        // Update in global list
+        const idx = algorithmList.findIndex(a => a.id === modifiedAlgo.id);
+        if (idx !== -1) {
+            algorithmList[idx] = original;
+        }
+
+        // Re-render
+        this.renderAlgorithmList();
+        this.selectAlgorithm(original);
+        this.runSimulation();
     }
 
     updateAlgorithmDescription() {
@@ -191,10 +250,29 @@ class BoardingLab {
             group.appendChild(input);
             container.appendChild(group);
         }
+
+        // Feature: Optimization for ANY algorithm with numeric params
+        if (Object.values(params).some(p => p.type === 'number')) {
+            const optimizeContainer = document.createElement('div');
+            optimizeContainer.style.marginTop = 'var(--space-4)';
+            optimizeContainer.style.paddingTop = 'var(--space-4)';
+            optimizeContainer.style.borderTop = '1px solid var(--color-border)';
+
+            const optimizeBtn = document.createElement('button');
+            optimizeBtn.className = 'btn btn-block btn-secondary';
+            optimizeBtn.innerHTML = '<span class="icon">🧬</span> Auto-Optimize Parameters';
+            optimizeBtn.addEventListener('click', () => this.runOptimization(optimizeBtn));
+
+            optimizeContainer.appendChild(optimizeBtn);
+            container.appendChild(optimizeContainer);
+        }
     }
 
+    /**
+     * Initialize the renderer
+     */
     initRenderer() {
-        this.renderer = new AircraftRenderer(this.elements.canvas, this.aircraft);
+        this.renderer = new BlueprintRenderer(this.elements.canvas, this.aircraft);
     }
 
     initTimeline() {
@@ -218,6 +296,50 @@ class BoardingLab {
             params[input.dataset.param] = parseFloat(input.value);
         });
         return params;
+    }
+
+    async runOptimization(btn) {
+        if (!confirm('This will run a genetic algorithm in the background to evolve better weights. It might take ~10-20 seconds. Continue?')) {
+            return;
+        }
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="icon animate-pulse">🧬</span> Evolving... 0%';
+
+        try {
+            const optimizer = new GeneticOptimizer(this.aircraft, this.selectedAlgorithm);
+
+            // Run optimization
+            const bestWeights = await optimizer.optimize((percent, best) => {
+                btn.innerHTML = `<span class="icon animate-pulse">🧬</span> Evolving... ${percent}%`;
+            });
+
+            // Apply results to inputs
+            for (const [key, value] of Object.entries(bestWeights)) {
+                const input = this.elements.parameters.querySelector(`input[data-param="${key}"]`);
+                if (input) {
+                    input.value = value;
+                    // Trigger flash effect
+                    input.style.transition = 'background-color 0.3s';
+                    input.style.backgroundColor = 'var(--color-accent-light)';
+                    setTimeout(() => input.style.backgroundColor = '', 500);
+                }
+            }
+
+            // Notify user
+            this.elements.explanationText.textContent = 'Optimization Complete! Found best parameters for current configuration.';
+
+            // Auto-run simulation with new weights
+            setTimeout(() => this.runSimulation(), 500);
+
+        } catch (err) {
+            console.error(err);
+            alert('Optimization failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 
     runSimulation() {
@@ -439,10 +561,43 @@ class BoardingLab {
 
         // Try to compile and validate
         try {
-            const fn = new Function('passenger', 'context', code);
+            // 1. Extract dynamic constants from code
+            const constantRegex = /const\s+(\w+)\s*=\s*([-+]?[\d\.]+);/g;
+            const dynamicParams = {};
+            let match;
+            while ((match = constantRegex.exec(code)) !== null) {
+                const [fullMatch, name, value] = match;
+                dynamicParams[name] = {
+                    label: name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+                    type: 'number',
+                    default: parseFloat(value),
+                    min: -100,
+                    max: 100
+                };
+            }
+
+            // 2. Prepare injection logic
+            const createPriorityFn = (params = {}, rng) => {
+                // Prepend param overrides
+                let injection = '';
+                for (const [key, val] of Object.entries(params)) {
+                    injection += `const ${key} = ${val};\n`;
+                }
+
+                // Comment out original declarations in user code to avoid re-declaration errors
+                const modifiedCode = code.replace(/const\s+(\w+)\s*=\s*([-+]?[\d\.]+);/g, (m, name) => {
+                    return params.hasOwnProperty(name) ? `// ${m} (UI Override)` : m;
+                });
+
+                const fullFnCode = `"use strict";\n${injection}\n${modifiedCode}`;
+                return new Function('passenger', 'context', fullFnCode);
+            };
+
+            // Test compilation
+            const testFn = createPriorityFn({}, this.rng);
 
             // Test with a sample passenger
-            const testResult = fn({
+            const testResult = testFn({
                 id: 1, row: 15, column: 'C', seatClass: 'aisle',
                 walkSpeed: 'normal', carryOnSize: 'small', compliance: 'normal',
                 groupId: null, seatsToPass: 0
@@ -453,22 +608,32 @@ class BoardingLab {
             }
 
             // Valid - update algorithm
-            this.selectedAlgorithm = {
+            const newAlgo = {
                 ...this.selectedAlgorithm,
                 name: this.selectedAlgorithm.name.includes('(Modified)')
                     ? this.selectedAlgorithm.name
                     : this.selectedAlgorithm.name + ' (Modified)',
                 code: code,
-                createPriorityFn: () => fn,
+                parameters: dynamicParams, // Use dynamic ones!
+                createPriorityFn: createPriorityFn,
                 isModified: true,
                 baseAlgorithm: this.selectedAlgorithm.baseAlgorithm || this.selectedAlgorithm
             };
+
+            // Update in global list
+            const idx = algorithmList.findIndex(a => a.id === this.selectedAlgorithm.id);
+            if (idx !== -1) {
+                algorithmList[idx] = newAlgo;
+            }
+            this.selectedAlgorithm = newAlgo;
 
             this.elements.validationMessages.innerHTML =
                 '<div class="validation-success">✓ Valid algorithm</div>';
 
             setTimeout(() => {
                 this.closeCodeEditor();
+                this.renderAlgorithmList(); // Update UI for asterisk
+                this.selectAlgorithm(this.selectedAlgorithm);
                 this.runSimulation();
             }, 500);
 

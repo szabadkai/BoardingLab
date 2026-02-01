@@ -76,6 +76,9 @@
       <div class="visualization-area">
         <!-- Simulation View -->
         <div class="simulation-view" id="simulation-view">
+          <div class="view-controls">
+            <!-- View controls removed: Blueprint is the only view -->
+          </div>
           <div class="aircraft-container">
             <canvas id="aircraft-canvas"></canvas>
           </div>
@@ -174,6 +177,12 @@
                     </ul>
                   </li>
                 </ul>
+
+                <h4>Exposed Weights:</h4>
+                <p>If your algorithm allows tuning, you can access these parameters in the code if you defined them in a
+                  preset, or hardcode your own logic.</p>
+                <p><strong>Note:</strong> The "Genetic Optimizer" can automatically tune numeric parameters defined in
+                  your algorithm.</p>
               </div>
             </details>
           </div>

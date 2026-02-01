@@ -17,6 +17,15 @@ The simulation runs entirely in your browser using **Vanilla JavaScript** and **
   - Watch passengers navigate the aisle, wait for others, and stow luggage.
   - Visual metrics for aisle blockages and seat shuffling.
   - Playback controls (speed, scrub, step).
+  - **Visualization Modes**: Realistic, Blueprint, and Heatmap.
+
+- **🧬 Optimization & Parameters**:
+  - **Exposed Weights**: Fine-tune algorithms using slider controls for parameters like:
+    - `Row Weight`: Importance of row number (Back-to-Front vs Front-to-Back).
+    - `Seat Weight`: Importance of seat position (Window vs Aisle).
+    - `Luggage Weight`: Impact of carry-on size.
+  - **Genetic Genetic Optimizer**: Automatically evolves the best combination of weights to minimize boarding time using a genetic algorithm.
+
 
 - **Advanced Mode**:
   - 🛠️ **Code Editor**: Write your own boarding algorithms in JavaScript.
