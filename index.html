@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/src/styles/index.css">
+  <link rel="stylesheet" href="./src/styles/index.css">
 </head>
 
 <body>
@@ -149,8 +149,33 @@
           <button class="btn btn-icon modal-close" id="modal-close">✕</button>
         </div>
         <div class="modal-body">
-          <div class="editor-warning">
-            ⚠️ Custom algorithms must follow the execution contract. Invalid code will be blocked.
+          <div class="editor-info">
+            <details>
+              <summary><strong>Documentation & Contract (Click to expand)</strong></summary>
+              <div class="api-docs">
+                <p>Your code must return a <strong>finite number</strong> representing the passenger's priority. Higher
+                  values board earlier.</p>
+
+                <h4>Input Variables:</h4>
+                <ul class="prop-list">
+                  <li><code>passenger</code>:
+                    <ul>
+                      <li><code>id</code> (number)</li>
+                      <li><code>row</code> (number, 1-30)</li>
+                      <li><code>column</code> (string, 'A'-'F')</li>
+                      <li><code>seatClass</code> ('window'|'middle'|'aisle')</li>
+                      <li><code>carryOnSize</code> ('none'|'small'|'large')</li>
+                    </ul>
+                  </li>
+                  <li><code>context</code>:
+                    <ul>
+                      <li><code>totalRows</code> (30)</li>
+                      <li><code>totalPassengers</code> (e.g. 150)</li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+            </details>
           </div>
           <div class="code-editor" id="code-editor">
             <textarea id="code-textarea" spellcheck="false"></textarea>
@@ -165,7 +190,7 @@
     </div>
   </div>
 
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="./src/main.js"></script>
 </body>
 
 </html>

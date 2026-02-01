@@ -22,19 +22,21 @@ export class AircraftRenderer {
             padding: 20,
 
             // Colors (from CSS variables concept)
+            // Colors (Matching new CSS Theme)
             colors: {
-                background: '#1a1a25',
-                seatEmpty: '#2a2a3a',
-                seatOccupied: '#10b981',
-                aisle: '#12121a',
-                aisleBlocked: 'rgba(239, 68, 68, 0.4)',
-                passenger: '#818cf8',
-                passengerWaiting: '#f59e0b',
-                passengerStowing: '#f59e0b',
-                passengerSeating: '#6366f1',
-                text: '#a0a0b0',
-                textLight: '#606070',
+                background: '#0f0f16', // bg-secondary
+                seatEmpty: '#1e1e2d',
+                seatOccupied: '#6366f1', // accent
+                aisle: '#0f0f16', // same as bg
+                aisleBlocked: 'rgba(248, 113, 113, 0.2)', // error with opacity
+                passenger: '#818cf8', // accent-light
+                passengerWaiting: '#fbbf24', // warning
+                passengerStowing: '#fbbf24',
+                passengerSeating: '#34d399', // success
+                text: '#94a3b8', // text-secondary
+                textLight: '#64748b', // text-muted
                 border: 'rgba(255, 255, 255, 0.1)',
+                grid: 'rgba(255, 255, 255, 0.03)',
             },
         };
 
@@ -139,6 +141,11 @@ export class AircraftRenderer {
         ctx.fillStyle = settings.colors.background;
         ctx.fillRect(0, 0, totalWidth, totalHeight);
 
+        // Draw Technical Grid
+        this._drawGrid();
+
+        // Draw Layers
+
         // Draw aisle background
         this._drawAisle(snapshot);
 
@@ -158,6 +165,32 @@ export class AircraftRenderer {
 
         // Draw entry area
         this._drawEntryArea(snapshot);
+    }
+
+    /**
+     * Draw subtle background grid
+     */
+    _drawGrid() {
+        const { ctx, dims, settings } = this;
+        const gridSize = 32;
+
+        ctx.strokeStyle = settings.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+
+        // Vertical lines
+        for (let x = 0; x <= dims.totalWidth; x += gridSize) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, dims.totalHeight);
+        }
+
+        // Horizontal lines
+        for (let y = 0; y <= dims.totalHeight; y += gridSize) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(dims.totalWidth, y);
+        }
+
+        ctx.stroke();
     }
 
     /**
@@ -298,11 +331,21 @@ export class AircraftRenderer {
                 color = settings.colors.passengerSeating;
             }
 
-            // Draw passenger circle
+            // Draw passenger circle with shadow/glow
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 8;
+
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
+
+            // Remove shadow for text/border
+            ctx.shadowBlur = 0;
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
             // Draw passenger ID
             ctx.fillStyle = '#fff';
@@ -332,8 +375,8 @@ export class AircraftRenderer {
         if (snapshot && snapshot.passengersWaiting) {
             const queueCount = snapshot.passengersWaiting.length;
             if (queueCount > 0) {
-                ctx.fillStyle = settings.colors.text;
-                ctx.font = '11px Inter, sans-serif';
+                ctx.fillStyle = settings.colors.passengerWaiting;
+                ctx.font = 'bold 11px Inter, sans-serif';
                 ctx.fillText(`Queue: ${queueCount}`, aisleX + aisleWidth / 2, y + 14);
             }
         }
